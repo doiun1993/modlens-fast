@@ -50,37 +50,49 @@ async function main() {
 
   const base = oa.baseUrl.replace(/\/+$/, '')
   const url = base + '/chat/completions'
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), args.timeout)
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${oa.apiKey}` },
-      body: JSON.stringify({
-        model: oa.model,
-        messages: [{ role: 'user', content: [
-          { type: 'image_url', image_url: { url: dataUrl } },
-          { type: 'text', text: focus },
-        ] }],
-        max_tokens: 600,
-        stream: false,
-      }),
-    })
-    if (!res.ok) {
-      const body = await res.text().catch(() => '')
-      console.error(`vision api error ${res.status}: ${body.slice(0, 300)}`); process.exit(1)
+  // 每次尝试的预算：总超时的一半（最少 8 秒）。引擎间歇性卡顿时，
+  // 第一次尝试在预算内被放弃，第二次换新连接通常立刻恢复。
+  const attemptMs = Math.max(8000, Math.floor(args.timeout / 2))
+  const body = JSON.stringify({
+    model: oa.model,
+    messages: [{ role: 'user', content: [
+      { type: 'image_url', image_url: { url: dataUrl } },
+      { type: 'text', text: focus },
+    ] }],
+    max_tokens: 600,
+    stream: false,
+  })
+  let lastError = null
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), attemptMs)
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${oa.apiKey}` },
+        body,
+      })
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '')
+        throw new Error(`api ${res.status}: ${errBody.slice(0, 300)}`)
+      }
+      const data = await res.json()
+      const answer = data?.choices?.[0]?.message?.content
+      if (typeof answer !== 'string' || !answer.trim()) {
+        throw new Error('empty content')
+      }
+      process.stdout.write(JSON.stringify({ result: { summary: answer.trim(), ocr: { full_text: '' }, uncertainty: [] } }))
+      clearTimeout(timer)
+      return
+    } catch (e) {
+      lastError = e
+      if (attempt === 1) continue
+      console.error(`vision api call failed after 2 attempts: ${String(lastError?.message ?? lastError)}`)
+      process.exit(1)
+    } finally {
+      clearTimeout(timer)
     }
-    const data = await res.json()
-    const answer = data?.choices?.[0]?.message?.content
-    if (typeof answer !== 'string' || !answer.trim()) {
-      console.error('vision api returned empty content'); process.exit(1)
-    }
-    process.stdout.write(JSON.stringify({ result: { summary: answer.trim(), ocr: { full_text: '' }, uncertainty: [] } }))
-  } catch (e) {
-    console.error(`vision api call failed: ${String(e?.message ?? e)}`); process.exit(1)
-  } finally {
-    clearTimeout(timer)
   }
 }
 
