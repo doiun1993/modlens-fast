@@ -225,6 +225,26 @@ const patches = [
       return s.slice(0, m.index) + TAIL + s.slice(m.index + m[0].length)
     },
   },
+  {
+    id: 'adapter-prepare-call',
+    guard: (s) => s.includes('async prepareCall(provider, model, signal)'),
+    apply: (s) => replaceOnce(s,
+      "          return { ...withVision(info), id: model }\n" +
+      "        },\n" +
+      "        stream(options) {",
+      "          return { ...withVision(info), id: model }\n" +
+      "        },\n" +
+      "        async prepareCall(provider, model, signal) {\n" +
+      "          // dsh ≥0.1.1-rc.2 要求适配器实现 prepareCall（准备一次调用，绑定同一代\n" +
+      "          // 的模型元数据与流式入口）。镜像 LlmAdapter 基类：解析模型并返回本包装器\n" +
+      "          // 的 stream，使「视觉变体」包装层在准备-派发流程里继续生效。\n" +
+      "          return {\n" +
+      "            model: await this.resolveModel(provider, model, signal),\n" +
+      "            stream: (options) => this.stream(options),\n" +
+      "          }\n" +
+      "        },\n" +
+      "        stream(options) {"),
+  },
 ]
 
 function replaceOnce(s, from, to) {
