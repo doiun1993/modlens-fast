@@ -14,8 +14,8 @@
     "url": "https://github.com/doiun1993/modlens-fast/issues"
   },
   "bin": {
-    "modlens-fast": "./modlens-fast",
-    "modlens-fast-patch": "./modlens-fast-patch"
+    "modlens-fast": "modlens-fast",
+    "modlens-fast-patch": "modlens-fast-patch"
   },
   "engines": {
     "node": ">=22.19"
