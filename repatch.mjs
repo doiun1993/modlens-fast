@@ -65,32 +65,52 @@ const patches = [
       "async function readImageBlock(ctx, block, signal, question) {"),
   },
   {
-    id: 'fast-cli-invocation',
-    guard: (s) => s.includes('const fastArgs = [FAST_CLI_PATH'),
+    id: 'timeout-constants',
+    guard: (s) => s.includes('const FAST_TIMEOUT_MS'),
     apply: (s) => replaceOnce(s,
-      "    const cli = process.env.MODLENS_DSH_CLI || CLI_PATH\n" +
-      "    const { stdout, stderr, code } = await run(\n" +
-      "      process.execPath,\n" +
-      "      [cli, '-i', file, '--timeout', String(CLI_TIMEOUT_MS)],\n" +
-      "      signal,\n" +
-      "    )\n" +
-      "    if (code !== 0) {",
-      "    const fastArgs = [FAST_CLI_PATH, '-i', file, '--timeout', String(CLI_TIMEOUT_MS)]\n" +
-      "    const q = question?.trim()\n" +
-      "    if (q) fastArgs.push('--prompt', q.slice(0, 1000))\n" +
-      "    let { stdout, stderr, code } = await run(process.execPath, fastArgs, signal)\n" +
-      "    if (code !== 0) {\n" +
-      "      // 轻量桥不可用（引擎非 openai / 未配置 / 网络错）时，回退到完整证据 CLI。\n" +
-      "      const slow = await run(\n" +
-      "        process.execPath,\n" +
-      "        [CLI_PATH, '-i', file, '--timeout', String(CLI_TIMEOUT_MS)],\n" +
-      "        signal,\n" +
-      "      )\n" +
-      "      stdout = slow.stdout\n" +
-      "      stderr = slow.stderr\n" +
-      "      code = slow.code\n" +
-      "    }\n" +
-      "    if (code !== 0) {"),
+      "const CLI_TIMEOUT_MS = 180_000",
+      "const CLI_TIMEOUT_MS = 180_000\n" +
+      "// 快速直答通道的硬超时：引擎卡住时最迟 20 秒放弃并回退，避免沉默数分钟。\n" +
+      "const FAST_TIMEOUT_MS = 20_000\n" +
+      "// 回退到完整证据 CLI 时的超时上限（同一引擎可能同样卡顿）。\n" +
+      "const FALLBACK_TIMEOUT_MS = 60_000"),
+  },
+  {
+    id: 'fast-cli-invocation',
+    guard: (s) => s.includes('String(FALLBACK_TIMEOUT_MS)'),
+    apply: (s) => {
+      const V4_BLOCK =
+        "    const fastArgs = [FAST_CLI_PATH, '-i', file, '--timeout', String(FAST_TIMEOUT_MS)]\n" +
+        "    const q = question?.trim()\n" +
+        "    if (q) fastArgs.push('--prompt', q.slice(0, 1000))\n" +
+        "    let { stdout, stderr, code } = await run(process.execPath, fastArgs, signal)\n" +
+        "    if (code !== 0) {\n" +
+        "      // 轻量桥超时/不可用（引擎卡顿、非 openai、网络错）时，快速回退到完整证据 CLI。\n" +
+        "      const slowArgs = [CLI_PATH, '-i', file, '--timeout', String(FALLBACK_TIMEOUT_MS)]\n" +
+        "      if (q) slowArgs.push('--prompt', q.slice(0, 1000))\n" +
+        "      const slow = await run(process.execPath, slowArgs, signal)\n" +
+        "      stdout = slow.stdout\n" +
+        "      stderr = slow.stderr\n" +
+        "      code = slow.code\n" +
+        "    }\n" +
+        "    if (code !== 0) {"
+      const PRISTINE =
+        "    const cli = process.env.MODLENS_DSH_CLI || CLI_PATH\n" +
+        "    const { stdout, stderr, code } = await run(\n" +
+        "      process.execPath,\n" +
+        "      [cli, '-i', file, '--timeout', String(CLI_TIMEOUT_MS)],\n" +
+        "      signal,\n" +
+        "    )\n" +
+        "    if (code !== 0) {"
+      if (s.includes(PRISTINE)) {
+        return replaceOnce(s, PRISTINE, V4_BLOCK)
+      }
+      // 已打过旧版（fastArgs 用 CLI_TIMEOUT_MS）→ 整块替换为带短超时的 v4
+      const region = /const fastArgs = \[FAST_CLI_PATH[\s\S]*?\n    \}\n    if \(code !== 0\) \{/
+      const m = s.match(region)
+      if (!m) throw new Error(`未找到 fastArgs 区域，modlens 版本可能已变化`)
+      return s.slice(0, m.index) + V4_BLOCK + s.slice(m.index + m[0].length)
+    },
   },
   {
     id: 'cache-signature',
