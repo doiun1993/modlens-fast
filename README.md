@@ -31,9 +31,9 @@ npx -y @deepseek-ai/dsh plugin --profile web add @liustack/modlens@3.22.1
 然后打补丁：
 
 ```sh
-node repatch.mjs                 # 默认补 web profile 下的 modlens
+node modlens-fast-patch            # 默认补 web profile 下的 modlens
 # 或指定其他 profile：
-node repatch.mjs C:\Users\你\.dsh\profiles\<profile>\node_modules\@liustack\modlens\dsh\index.js
+node modlens-fast-patch C:\Users\你\.dsh\profiles\<profile>\node_modules\@liustack\modlens\dsh\index.js
 ```
 
 重启 DSH 生效。之后粘贴图片即可体验直答模式。
@@ -43,7 +43,7 @@ node repatch.mjs C:\Users\你\.dsh\profiles\<profile>\node_modules\@liustack\mod
 升级会覆盖补丁，重跑一次即可（脚本幂等，已打过会跳过）：
 
 ```sh
-node repatch.mjs
+node modlens-fast-patch
 ```
 
 ## 兼容性
@@ -55,7 +55,7 @@ node repatch.mjs
 ## 手动使用轻量桥
 
 ```sh
-node fast-cli.mjs -i <图片路径> --prompt "这是谁"
+node modlens-fast -i <图片路径> --prompt "这是谁"
 ```
 
 ## 致谢与许可

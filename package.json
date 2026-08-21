@@ -14,8 +14,8 @@
     "url": "https://github.com/doiun1993/modlens-fast/issues"
   },
   "bin": {
-    "modlens-fast": "./fast-cli.mjs",
-    "modlens-fast-patch": "./repatch.mjs"
+    "modlens-fast": "./modlens-fast",
+    "modlens-fast-patch": "./modlens-fast-patch"
   },
   "engines": {
     "node": ">=22.19"
@@ -29,8 +29,8 @@
     "patch"
   ],
   "files": [
-    "fast-cli.mjs",
-    "repatch.mjs",
+    "modlens-fast",
+    "modlens-fast-patch",
     "README.md",
     "LICENSE"
   ]

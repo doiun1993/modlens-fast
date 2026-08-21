@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// fast-cli.mjs
+// modlens-fast
 // 轻量「按问题直答」视觉桥：与 modlens 插件配套，替代自动读图路径里
 // 「生成全套证据契约再丢弃大半」的原 CLI。读 ~/.modlens/config.json 的
 // openai 活跃槽（默认阿里云，用户可用 modlens config use 切换），
@@ -7,7 +7,7 @@
 // 间歇性卡顿对策：递增重试——第 1 次 10 秒、第 2 次 20 秒、第 3 次 30 秒…
 // 超时即换新连接重发，总预算 90 秒，厂商池级故障通常在某一次重试中恢复。
 //
-// 用法: node fast-cli.mjs -i <image> [--prompt <question>] [--timeout <ms>]
+// 用法: node modlens-fast -i <image> [--prompt <question>] [--timeout <ms>]
 // 输出: { "result": { "summary": <答案>, "ocr": {"full_text": ""}, "uncertainty": [] } }
 import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
