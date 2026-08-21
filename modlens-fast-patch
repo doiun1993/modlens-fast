@@ -245,6 +245,13 @@ const patches = [
       "        },\n" +
       "        stream(options) {"),
   },
+  {
+    id: 'evidence-marker',
+    guard: (s) => s.includes('【视觉桥识别结果】'),
+    apply: (s) => replaceOnce(s,
+      "        text: `[Pasted image, read by the modlens vision bridge]\\n${renderEvidence(parsed.result)}`,",
+      "        text: `[Pasted image, read by the modlens vision bridge]\\n【视觉桥识别结果】\\n${renderEvidence(parsed.result)}`,"),
+  },
 ]
 
 function replaceOnce(s, from, to) {
