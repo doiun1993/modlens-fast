@@ -165,6 +165,18 @@ const patches = [
       "            }\n" +
       "            yield* ctx.llm.stream(delegated)"),
   },
+  {
+    id: 'repoint-fast-cli',
+    guard: (s) => s.includes(`const FAST_CLI_PATH = process.env.MODLENS_FAST_CLI || '${fastCliLiteral}'`),
+    apply: (s) => {
+      // 包被移动后，重新把嵌入的 fast-cli 绝对路径指向当前位置（幂等）。
+      const re = /const FAST_CLI_PATH = process\.env\.MODLENS_FAST_CLI \|\| '[^']*'/
+      const m = s.match(re)
+      if (!m) throw new Error(`未找到 FAST_CLI_PATH 行，modlens 版本可能已变化`)
+      const line = `const FAST_CLI_PATH = process.env.MODLENS_FAST_CLI || '${fastCliLiteral}'`
+      return s.slice(0, m.index) + line + s.slice(m.index + m[0].length)
+    },
+  },
 ]
 
 function replaceOnce(s, from, to) {
