@@ -130,71 +130,71 @@ const patches = [
       "        )"),
   },
   {
-    id: 'latest-user-helper',
-    guard: (s) => s.includes('function latestUserHasImage(messages)'),
-    apply: (s) => replaceOnce(s,
-      "function contentHasImage(blocks) {\n" +
-      "  return (\n" +
-      "    Array.isArray(blocks) &&\n" +
-      "    blocks.some((b) => b?.type === 'image' || (b?.type === 'tool-result' && contentHasImage(b.content)))\n" +
-      "  )\n" +
-      "}",
-      "function contentHasImage(blocks) {\n" +
-      "  return (\n" +
-      "    Array.isArray(blocks) &&\n" +
-      "    blocks.some((b) => b?.type === 'image' || (b?.type === 'tool-result' && contentHasImage(b.content)))\n" +
-      "  )\n" +
-      "}\n" +
-      "\n" +
-      "// 本轮「新」输入是否带图片：只看最新一条 user 消息，历史回放里的旧图不算。\n" +
-      "// 有图时答案已由视觉模型直答给出，DeepSeek 无需深度思考：high/max 降到 low。\n" +
-      "function latestUserHasImage(messages) {\n" +
-      "  if (!Array.isArray(messages)) return false\n" +
-      "  for (let i = messages.length - 1; i >= 0; i--) {\n" +
-      "    const m = messages[i]\n" +
-      "    if (m?.role === 'user' && Array.isArray(m.content)) {\n" +
-      "      return contentHasImage(m.content)\n" +
-      "    }\n" +
-      "  }\n" +
-      "  return false\n" +
-      "}"),
+    id: 'image-question-helper',
+    guard: (s) => s.includes('function lastMessageIsImageQuestion(messages)'),
+    apply: (s) => {
+      const NEW_HELPER =
+        "// 本轮首条输入是否带图片：只看最后一条消息。图片问题得到直答后，模型继续\n" +
+        "// 执行其他行动（工具调用等）时，最后一条消息不再是该图，推理档位自动回到\n" +
+        "// 会话默认值。\n" +
+        "function lastMessageIsImageQuestion(messages) {\n" +
+        "  if (!Array.isArray(messages) || messages.length === 0) return false\n" +
+        "  const last = messages[messages.length - 1]\n" +
+        "  return last?.role === 'user' && contentHasImage(last.content)\n" +
+        "}"
+      // 旧版 helper（latestUserHasImage）→ 整块换成新 helper
+      const oldRe = /\/\/ 本轮「新」输入是否带图片[\s\S]*?\n}\n/
+      const m = s.match(oldRe)
+      if (m) {
+        return s.slice(0, m.index) + NEW_HELPER + '\n' + s.slice(m.index + m[0].length)
+      }
+      // 纯净文件 → 在 contentHasImage 之后插入
+      return replaceOnce(s,
+        "function contentHasImage(blocks) {\n" +
+        "  return (\n" +
+        "    Array.isArray(blocks) &&\n" +
+        "    blocks.some((b) => b?.type === 'image' || (b?.type === 'tool-result' && contentHasImage(b.content)))\n" +
+        "  )\n" +
+        "}",
+        "function contentHasImage(blocks) {\n" +
+        "  return (\n" +
+        "    Array.isArray(blocks) &&\n" +
+        "    blocks.some((b) => b?.type === 'image' || (b?.type === 'tool-result' && contentHasImage(b.content)))\n" +
+        "  )\n" +
+        "}\n" +
+        "\n" +
+        NEW_HELPER)
+    },
   },
   {
-    id: 'stream-reasoning-low',
-    guard: (s) => s.includes("effort !== 'off' && effort !== 'low'"),
+    id: 'stream-reasoning-scoped',
+    guard: (s) => s.includes('lastMessageIsImageQuestion(options.messages)'),
     apply: (s) => {
-      const NEW_BLOCK =
+      const HEAD =
+        "            const converted = await convertImagesToEvidence(ctx, options.messages, options.signal, self)\n" +
+        "            const messages = restoreUpstreamSource(converted, providerId, upstream)\n"
+      const TAIL =
         "            const delegated = { ...options, provider: upstream, messages }\n" +
-        "            // 本轮有新图片输入时，答案已由视觉模型直答给出，DeepSeek 无需深度思考：\n" +
-        "            // 把 high/max 降到 low（保留思考模式的 reasoning_content 连续性——\n" +
-        "            // 直接 off 会让下一轮 thinking 请求因缺 reasoning_content 报\n" +
-        "            // INVALID_REQUEST）。会话本身已是 off/low 时不动它。\n" +
-        "            if (String(upstream).startsWith('deepseek') && latestUserHasImage(options.messages)) {\n" +
+        "            // 图片问题的第一步：答案已由视觉模型直答给出，DeepSeek 无需深度思考，\n" +
+        "            // 把 high/max 降到 low。随后模型继续执行其他行动（工具调用等）时，\n" +
+        "            // 最后一条消息不再是图片问题，推理档位自动回到会话默认值。\n" +
+        "            // 只降档不关思考（保留 reasoning_content 连续性，避免 INVALID_REQUEST）。\n" +
+        "            if (String(upstream).startsWith('deepseek') && lastMessageIsImageQuestion(options.messages)) {\n" +
         "              const effort = options.reasoningEffort\n" +
         "              if (effort !== undefined && effort !== 'off' && effort !== 'low') {\n" +
         "                delegated.reasoningEffort = 'low'\n" +
         "              }\n" +
         "            }\n" +
         "            yield* ctx.llm.stream(delegated)"
-      const OFF_BLOCK =
-        "            const delegated = { ...options, provider: upstream, messages }\n" +
-        "            // 本轮有新图片输入时，答案已由视觉模型直答给出，DeepSeek 无需思考：\n" +
-        "            // 强制关掉推理，省掉「deep dive」那段时间（仅对 deepseek 上游生效）。\n" +
-        "            if (String(upstream).startsWith('deepseek') && latestUserHasImage(options.messages)) {\n" +
-        "              delegated.reasoningEffort = 'off'\n" +
-        "            }\n" +
-        "            yield* ctx.llm.stream(delegated)"
-      if (s.includes(OFF_BLOCK)) {
-        // 旧版补丁（off，会触发 INVALID_REQUEST）→ 原地换成降 low 逻辑
-        return replaceOnce(s, OFF_BLOCK, NEW_BLOCK)
+      const PRISTINE = HEAD + "            yield* ctx.llm.stream({ ...options, provider: upstream, messages })"
+      if (s.includes(PRISTINE)) {
+        return replaceOnce(s, PRISTINE, HEAD + TAIL)
       }
-      return replaceOnce(s,
-        "            const converted = await convertImagesToEvidence(ctx, options.messages, options.signal, self)\n" +
-        "            const messages = restoreUpstreamSource(converted, providerId, upstream)\n" +
-        "            yield* ctx.llm.stream({ ...options, provider: upstream, messages })",
-        "            const converted = await convertImagesToEvidence(ctx, options.messages, options.signal, self)\n" +
-        "            const messages = restoreUpstreamSource(converted, providerId, upstream)\n" +
-        NEW_BLOCK)
+      // 任一旧版（off / low+latestUserHasImage）→ 整块 delegated 区域换成 v3
+      const region = /const delegated = \{ \.\.\.options, provider: upstream, messages \}[\s\S]*?yield\* ctx\.llm\.stream\(delegated\)/
+      const m = s.match(region)
+      if (!m) throw new Error(`未找到 delegated 区域，modlens 版本可能已变化`)
+      return s.slice(0, m.index) + TAIL + s.slice(m.index + m[0].length)
     },
   },
 ]
