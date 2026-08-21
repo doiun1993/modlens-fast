@@ -1,0 +1,28 @@
+{
+  "name": "modlens-fast",
+  "version": "0.1.0",
+  "description": "给 DeepSeek Harness 的 ModLens 视觉插件提速的第三方补丁：图片+问题直接由视觉模型作答，跳过完整证据契约与 DeepSeek 二次思考，识图从 ~10 秒降到 ~2.5 秒",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "modlens-fast": "./fast-cli.mjs",
+    "modlens-fast-patch": "./repatch.mjs"
+  },
+  "engines": {
+    "node": ">=22.19"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "modlens",
+    "vision",
+    "multimodal",
+    "patch"
+  ],
+  "files": [
+    "fast-cli.mjs",
+    "repatch.mjs",
+    "README.md",
+    "LICENSE"
+  ]
+}

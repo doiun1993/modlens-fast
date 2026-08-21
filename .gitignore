@@ -1,0 +1,8 @@
+node_modules/
+*.tgz
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.json.bak
+.DS_Store
