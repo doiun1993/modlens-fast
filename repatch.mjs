@@ -66,19 +66,19 @@ const patches = [
   },
   {
     id: 'timeout-constants',
-    guard: (s) => s.includes('const FAST_TIMEOUT_MS = 40_000') && s.includes('const FALLBACK_TIMEOUT_MS = 30_000'),
+    guard: (s) => s.includes('const FAST_TIMEOUT_MS = 90_000') && s.includes('const FALLBACK_TIMEOUT_MS = 30_000'),
     apply: (s) => {
       // 已有旧值 → 更新两个数字；否则在 CLI_TIMEOUT_MS 后插入
       if (/const FAST_TIMEOUT_MS = /.test(s)) {
-        let out = s.replace(/const FAST_TIMEOUT_MS = \d[\d_]*/, 'const FAST_TIMEOUT_MS = 40_000')
+        let out = s.replace(/const FAST_TIMEOUT_MS = \d[\d_]*/, 'const FAST_TIMEOUT_MS = 90_000')
         out = out.replace(/const FALLBACK_TIMEOUT_MS = \d[\d_]*/, 'const FALLBACK_TIMEOUT_MS = 30_000')
         return out === s ? s : out
       }
       return replaceOnce(s,
         "const CLI_TIMEOUT_MS = 180_000",
         "const CLI_TIMEOUT_MS = 180_000\n" +
-        "// 快速直答通道的总预算：多引擎（主+备用）各两次尝试，约 40 秒上限。\n" +
-        "const FAST_TIMEOUT_MS = 40_000\n" +
+        "// 快速直答通道的总预算：递增重试（10s/20s/30s…）的 90 秒封顶。\n" +
+        "const FAST_TIMEOUT_MS = 90_000\n" +
         "// 回退到完整证据 CLI 时的超时上限（同一引擎可能同样卡顿）。\n" +
         "const FALLBACK_TIMEOUT_MS = 30_000")
     },
