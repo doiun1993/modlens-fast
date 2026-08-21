@@ -4,6 +4,15 @@
   "description": "给 DeepSeek Harness 的 ModLens 视觉插件提速的第三方补丁：图片+问题直接由视觉模型作答，跳过完整证据契约与 DeepSeek 二次思考，识图从 ~10 秒降到 ~2.5 秒",
   "license": "MIT",
   "type": "module",
+  "author": "doiun1993",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/doiun1993/modlens-fast.git"
+  },
+  "homepage": "https://github.com/doiun1993/modlens-fast#readme",
+  "bugs": {
+    "url": "https://github.com/doiun1993/modlens-fast/issues"
+  },
   "bin": {
     "modlens-fast": "./fast-cli.mjs",
     "modlens-fast-patch": "./repatch.mjs"
