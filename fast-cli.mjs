@@ -45,7 +45,7 @@ async function main() {
 
   const question = (args.prompt ?? '').trim()
   const focus = question
-    ? `The user asked: "${question}".\nAnswer that question directly and concisely, in the same language the user used. If the question asks for full transcription, exhaustive listing, or a detailed structured analysis of the image, provide that depth; otherwise give a brief, direct answer (for an identity question, just name the person and the one or two strongest reasons). Do not recite the OCR contract, layout regions, or semantics fields. If the question contains parts unrelated to the image (for example searching the web or writing code), answer ONLY the image-related part and ignore the rest; the text model will handle those tasks.`
+    ? `The user asked: "${question}".\nAnswer that question directly and concisely, in the same language the user used. If the question asks for full transcription, exhaustive listing, or a detailed structured analysis of the image, provide that depth; otherwise give a brief, direct answer (for an identity question, just name the person and the one or two strongest reasons). Do not recite the OCR contract, layout regions, or semantics fields. If the question contains parts unrelated to the image (for example searching the web or writing code), answer ONLY the image-related part and ignore the rest; the text model will handle those tasks. If you cannot confidently identify the person, say so explicitly ("无法确定") and describe only distinctive features — never guess, never list multiple contradictory candidates, and never self-correct in circles.`
     : `Describe this image concisely: what it shows, the key text if any, and any notable details.`
 
   const base = oa.baseUrl.replace(/\/+$/, '')
