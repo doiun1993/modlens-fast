@@ -5,7 +5,7 @@
 //
 // 用法: node repatch.mjs [dsh/index.js 路径]
 // 默认路径: ~/.dsh/profiles/web/node_modules/@liustack/modlens/dsh/index.js
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, writeFile, copyFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -14,20 +14,31 @@ import { spawnSync } from 'node:child_process'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const target = process.argv[2] ?? join(homedir(), '.dsh', 'profiles', 'web', 'node_modules', '@liustack', 'modlens', 'dsh', 'index.js')
 
-const fastCliAbs = join(__dirname, 'fast-cli.mjs')
-const fastCliLiteral = fastCliAbs.replace(/\\/g, '\\\\')
+// fast-cli 会被复制进 modlens 包根目录，嵌入路径用「相对形式」：
+// 本机安装与发布仓库之间没有任何绝对路径引用，完全解耦。
+const FAST_CLI_LINE = "const FAST_CLI_PATH = process.env.MODLENS_FAST_CLI || fileURLToPath(new URL('../fast-cli.mjs', import.meta.url))"
 
 // 每个补丁：id、是否已应用（guard）、应用函数（返回新文本，找不到 old 时抛错）。
 const patches = [
   {
     id: 'fast-cli-constant',
-    guard: (s) => s.includes('const FAST_CLI_PATH'),
-    apply: (s) => replaceOnce(s,
-      "const CLI_PATH = fileURLToPath(new URL('../dist/main.js', import.meta.url))",
-      "const CLI_PATH = fileURLToPath(new URL('../dist/main.js', import.meta.url))\n" +
-      "// 轻量「按问题直答」视觉桥：自动读图路径用它，视觉模型直接回答用户问题，\n" +
-      "// 而非生成整套证据契约再丢弃大半。可用 MODLENS_FAST_CLI 环境变量覆盖。\n" +
-      `const FAST_CLI_PATH = process.env.MODLENS_FAST_CLI || '${fastCliLiteral}'`),
+    guard: (s) => s.includes(FAST_CLI_LINE),
+    apply: (s) => {
+      const existing = /const FAST_CLI_PATH = [^\n]+\n/.exec(s)
+      if (existing) {
+        // 已打过旧版（绝对路径行）→ 原地换成相对形式
+        return s.slice(0, existing.index) + FAST_CLI_LINE + '\n' + s.slice(existing.index + existing[0].length)
+      }
+      // 未打过 → 在 CLI_PATH 行后插入
+      const anchor = "const CLI_PATH = fileURLToPath(new URL('../dist/main.js', import.meta.url))"
+      const i = s.indexOf(anchor)
+      if (i === -1) throw new Error(`未找到 CLI_PATH 锚点，modlens 版本可能已变化`)
+      const end = i + anchor.length
+      return s.slice(0, end) + '\n' +
+        '// 轻量「按问题直答」视觉桥：自动读图路径用它，视觉模型直接回答用户问题，\n' +
+        '// 而非生成整套证据契约再丢弃大半。可用 MODLENS_FAST_CLI 环境变量覆盖。\n' +
+        FAST_CLI_LINE + s.slice(end)
+    },
   },
   {
     id: 'question-helper',
@@ -165,18 +176,6 @@ const patches = [
       "            }\n" +
       "            yield* ctx.llm.stream(delegated)"),
   },
-  {
-    id: 'repoint-fast-cli',
-    guard: (s) => s.includes(`const FAST_CLI_PATH = process.env.MODLENS_FAST_CLI || '${fastCliLiteral}'`),
-    apply: (s) => {
-      // 包被移动后，重新把嵌入的 fast-cli 绝对路径指向当前位置（幂等）。
-      const re = /const FAST_CLI_PATH = process\.env\.MODLENS_FAST_CLI \|\| '[^']*'/
-      const m = s.match(re)
-      if (!m) throw new Error(`未找到 FAST_CLI_PATH 行，modlens 版本可能已变化`)
-      const line = `const FAST_CLI_PATH = process.env.MODLENS_FAST_CLI || '${fastCliLiteral}'`
-      return s.slice(0, m.index) + line + s.slice(m.index + m[0].length)
-    },
-  },
 ]
 
 function replaceOnce(s, from, to) {
@@ -210,6 +209,12 @@ async function main() {
       process.exit(1)
     }
   }
+
+  // 把本包的 fast-cli 复制进 modlens 包根目录，使其完全自包含、与本仓库解耦。
+  const pkgRoot = dirname(dirname(target))
+  const bridge = join(pkgRoot, 'fast-cli.mjs')
+  await copyFile(join(__dirname, 'fast-cli.mjs'), bridge)
+  console.log(`[复制] fast-cli.mjs -> ${bridge}`)
 
   if (!changed) {
     console.log('所有补丁已就位，无需修改。')
