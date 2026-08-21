@@ -147,7 +147,7 @@ const patches = [
       "}\n" +
       "\n" +
       "// 本轮「新」输入是否带图片：只看最新一条 user 消息，历史回放里的旧图不算。\n" +
-      "// 有图时答案已由视觉模型直答给出，DeepSeek 无需思考，据此强制关推理。\n" +
+      "// 有图时答案已由视觉模型直答给出，DeepSeek 无需深度思考：high/max 降到 low。\n" +
       "function latestUserHasImage(messages) {\n" +
       "  if (!Array.isArray(messages)) return false\n" +
       "  for (let i = messages.length - 1; i >= 0; i--) {\n" +
@@ -160,21 +160,42 @@ const patches = [
       "}"),
   },
   {
-    id: 'stream-reasoning-off',
-    guard: (s) => s.includes("delegated.reasoningEffort = 'off'"),
-    apply: (s) => replaceOnce(s,
-      "            const converted = await convertImagesToEvidence(ctx, options.messages, options.signal, self)\n" +
-      "            const messages = restoreUpstreamSource(converted, providerId, upstream)\n" +
-      "            yield* ctx.llm.stream({ ...options, provider: upstream, messages })",
-      "            const converted = await convertImagesToEvidence(ctx, options.messages, options.signal, self)\n" +
-      "            const messages = restoreUpstreamSource(converted, providerId, upstream)\n" +
-      "            const delegated = { ...options, provider: upstream, messages }\n" +
-      "            // 本轮有新图片输入时，答案已由视觉模型直答给出，DeepSeek 无需思考：\n" +
-      "            // 强制关掉推理，省掉「deep dive」那段时间（仅对 deepseek 上游生效）。\n" +
-      "            if (String(upstream).startsWith('deepseek') && latestUserHasImage(options.messages)) {\n" +
-      "              delegated.reasoningEffort = 'off'\n" +
-      "            }\n" +
-      "            yield* ctx.llm.stream(delegated)"),
+    id: 'stream-reasoning-low',
+    guard: (s) => s.includes("effort !== 'off' && effort !== 'low'"),
+    apply: (s) => {
+      const NEW_BLOCK =
+        "            const delegated = { ...options, provider: upstream, messages }\n" +
+        "            // 本轮有新图片输入时，答案已由视觉模型直答给出，DeepSeek 无需深度思考：\n" +
+        "            // 把 high/max 降到 low（保留思考模式的 reasoning_content 连续性——\n" +
+        "            // 直接 off 会让下一轮 thinking 请求因缺 reasoning_content 报\n" +
+        "            // INVALID_REQUEST）。会话本身已是 off/low 时不动它。\n" +
+        "            if (String(upstream).startsWith('deepseek') && latestUserHasImage(options.messages)) {\n" +
+        "              const effort = options.reasoningEffort\n" +
+        "              if (effort !== undefined && effort !== 'off' && effort !== 'low') {\n" +
+        "                delegated.reasoningEffort = 'low'\n" +
+        "              }\n" +
+        "            }\n" +
+        "            yield* ctx.llm.stream(delegated)"
+      const OFF_BLOCK =
+        "            const delegated = { ...options, provider: upstream, messages }\n" +
+        "            // 本轮有新图片输入时，答案已由视觉模型直答给出，DeepSeek 无需思考：\n" +
+        "            // 强制关掉推理，省掉「deep dive」那段时间（仅对 deepseek 上游生效）。\n" +
+        "            if (String(upstream).startsWith('deepseek') && latestUserHasImage(options.messages)) {\n" +
+        "              delegated.reasoningEffort = 'off'\n" +
+        "            }\n" +
+        "            yield* ctx.llm.stream(delegated)"
+      if (s.includes(OFF_BLOCK)) {
+        // 旧版补丁（off，会触发 INVALID_REQUEST）→ 原地换成降 low 逻辑
+        return replaceOnce(s, OFF_BLOCK, NEW_BLOCK)
+      }
+      return replaceOnce(s,
+        "            const converted = await convertImagesToEvidence(ctx, options.messages, options.signal, self)\n" +
+        "            const messages = restoreUpstreamSource(converted, providerId, upstream)\n" +
+        "            yield* ctx.llm.stream({ ...options, provider: upstream, messages })",
+        "            const converted = await convertImagesToEvidence(ctx, options.messages, options.signal, self)\n" +
+        "            const messages = restoreUpstreamSource(converted, providerId, upstream)\n" +
+        NEW_BLOCK)
+    },
   },
 ]
 
